@@ -9,68 +9,51 @@ import kotlinx.cinterop.*
 import gtk3.*
 
 
-fun ButtonAction() {
-  println("Hi Kotlin")
-}
-
-
-// Note that all callback parameters must be primitive types or nullable C pointers.
-fun <F : CFunction<*>> g_signal_connect(obj: CPointer<*>, actionName: String,
-        action: CPointer<F>, data: gpointer? = null, connect_flags: GConnectFlags = 0u) {
-    g_signal_connect_data(obj.reinterpret(), actionName, action.reinterpret(),
-            data = data, destroy_data = null, connect_flags = connect_flags)
-}
-
-fun activate(app: CPointer<GtkApplication>?, user_data: gpointer?) {
-
-    val windowWidget: CPointer<GtkWidget> = gtk_application_window_new(app)!!
-    val window: CPointer<GtkWindow> = windowWidget.reinterpret<GtkWindow>()
-
-    gtk_window_set_title(window, "Window")
-    gtk_window_set_default_size(window, 800, 200)
-
-    val button_box = gtk_button_box_new(GtkOrientation.GTK_ORIENTATION_HORIZONTAL)!!
-
-    gtk_container_add(window.reinterpret(), button_box)
-
-    val button = gtk_button_new_with_label("Konan говорит: click me!")!!
-
-    g_signal_connect(button, "clicked", staticCFunction { _: CPointer<GtkWidget>?, _: gpointer? -> ButtonAction() })
-
-    g_signal_connect(button, "clicked", staticCFunction { widget: CPointer<GtkWidget>? -> gtk_widget_destroy(widget) }, window, G_CONNECT_SWAPPED)
-
-    gtk_container_add (button_box.reinterpret(), button)
-
-    gtk_widget_show_all(windowWidget)
-}
-
-fun gtkMain(args: Array<String>): Int {
-    val app = gtk_application_new("org.gtk.example", G_APPLICATION_FLAGS_NONE)!!
-
-
-    g_signal_connect(app, "activate", staticCFunction(::activate))
-    val status = memScoped {
-        g_application_run(app.reinterpret(),
-                args.size, args.map { it.cstr.ptr }.toCValues())
-    }
-    g_object_unref(app)
-    return status
-}
-
 fun main(args: Array<String>) {
 
-    //memScoped {
-        //val argc = args.size.toCPointer<IntVar>()
-        //val argv = args.map { it.cstr.getPointer(memScope) }
+    memScoped {
+        val argc = alloc<IntVar>()
+        argc.value = args.size
+        val argv = alloc<CPointerVar<CPointerVar<ByteVar>>>()
+        argv.value = args.map { it.cstr.ptr }.toCValues().ptr
+        gtk_init(argc.ptr, argv.ptr)
+    }
+
+    /* Construct a GtkBuilder instance and load our UI description */
+    val builder = gtk_builder_new()
+    val isLoaded = gtk_builder_add_from_file (builder, "builder.ui", null)
+    if(isLoaded == 0u) {
+	println("Error loadding .ui file")
+        return
+    }
+
+    /* Connect signal handlers to the constructed widgets. */
+    val window = gtk_builder_get_object(builder, "window")!!
+    g_signal_connect_data(window.reinterpret(), "destroy", 
+    staticCFunction { widget: CPointer<GtkWidget>? -> gtk_widget_destroy(widget) }.reinterpret(),
+    null, null, 0u)
 
 
-        //autoreleasepool {
-           //gtk_init(argc, argv)
-        //}
-
-    //}
-
+    val button1 = gtk_builder_get_object(builder, "button1")!!
+    g_signal_connect_data(button1.reinterpret(), "clicked", 
+    staticCFunction { _: CPointer<GtkWidget>?, _: gpointer? -> println("Button 1 clicked!") }.reinterpret(),
+    null, null, 0u)
 
 
-    gtkMain(args)
+    val button2 = gtk_builder_get_object (builder, "button2")!!
+    g_signal_connect_data(button2.reinterpret(), "clicked", 
+    staticCFunction { _: CPointer<GtkWidget>?, _: gpointer? -> println("Button 2 clicked!") }.reinterpret(),
+    null, null, 0u)
+
+
+    val button3 = gtk_builder_get_object(builder, "quit")!!
+    g_signal_connect_data(button3.reinterpret(), "clicked", 
+    staticCFunction { _: CPointer<GtkWidget>? -> gtk_main_quit() }.reinterpret(),
+    null, null, 0u)
+
+
+    gtk_main()
+
+    return
+
 }
